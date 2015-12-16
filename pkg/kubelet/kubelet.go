@@ -270,6 +270,13 @@ func NewMainKubelet(
 
 	oomWatcher := NewOOMWatcher(cadvisorInterface, recorder)
 
+	// TODO: remove when internal cbr0 implementation gets removed in favor
+	// of the kubenet network plugin
+	if networkPluginName == "kubenet" {
+		configureCBR0 = false
+		flannelExperimentalOverlay = false
+	}
+
 	klet := &Kubelet{
 		hostname:                       hostname,
 		nodeName:                       nodeName,
@@ -641,6 +648,7 @@ type Kubelet struct {
 	resolverConfig string
 
 	// Optionally shape the bandwidth of a pod
+	// TODO: remove when kubenet plugin is ready
 	shaper bandwidth.BandwidthShaper
 
 	// True if container cpu limits should be enforced via cgroup CFS quota
@@ -2561,6 +2569,8 @@ func (kl *Kubelet) updateRuntimeUp() {
 	kl.runtimeState.setRuntimeSync(kl.clock.Now())
 }
 
+// TODO: remove when kubenet plugin is ready
+// NOTE!!! if you make changes here, also make them to kubenet
 func (kl *Kubelet) reconcileCBR0(podCIDR string) error {
 	if podCIDR == "" {
 		glog.V(5).Info("PodCIDR not set. Will not configure cbr0.")
