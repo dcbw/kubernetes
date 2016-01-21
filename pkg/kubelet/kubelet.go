@@ -320,7 +320,12 @@ func NewMainKubelet(
 		}
 		glog.Infof("Using node IP: %q", klet.nodeIP.String())
 	}
-	if plug, err := network.InitNetworkPlugin(networkPlugins, networkPluginName, &networkHost{klet}); err != nil {
+
+	nodeAddrs, err := klet.getNodeAddresses()
+	if err != nil {
+		return nil, err
+	}
+	if plug, err := network.InitNetworkPlugin(networkPlugins, networkPluginName, &networkHost{klet}, nodeAddrs); err != nil {
 		return nil, err
 	} else {
 		klet.networkPlugin = plug
@@ -2649,71 +2654,67 @@ func (kl *Kubelet) syncNetworkStatus() {
 	kl.runtimeState.setNetworkState(err)
 }
 
-// Set addresses for the node.
-func (kl *Kubelet) setNodeAddress(node *api.Node) error {
+// Return addresses for the node.
+func (kl *Kubelet) getNodeAddresses() ([]api.NodeAddress, error) {
 	// Set addresses for the node.
 	if kl.cloud != nil {
 		instances, ok := kl.cloud.Instances()
 		if !ok {
-			return fmt.Errorf("failed to get instances from cloud provider")
+			return []api.NodeAddress{}, fmt.Errorf("failed to get instances from cloud provider")
 		}
 		// TODO(roberthbailey): Can we do this without having credentials to talk
 		// to the cloud provider?
 		// TODO(justinsb): We can if CurrentNodeName() was actually CurrentNode() and returned an interface
 		nodeAddresses, err := instances.NodeAddresses(kl.nodeName)
 		if err != nil {
-			return fmt.Errorf("failed to get node address from cloud provider: %v", err)
+			return []api.NodeAddress{}, fmt.Errorf("failed to get node address from cloud provider: %v", err)
 		}
-		node.Status.Addresses = nodeAddresses
-	} else {
-		if kl.nodeIP != nil {
-			node.Status.Addresses = []api.NodeAddress{
-				{Type: api.NodeLegacyHostIP, Address: kl.nodeIP.String()},
-				{Type: api.NodeInternalIP, Address: kl.nodeIP.String()},
-			}
-		} else if addr := net.ParseIP(kl.hostname); addr != nil {
-			node.Status.Addresses = []api.NodeAddress{
-				{Type: api.NodeLegacyHostIP, Address: addr.String()},
-				{Type: api.NodeInternalIP, Address: addr.String()},
-			}
-		} else {
-			addrs, err := net.LookupIP(node.Name)
-			if err != nil {
-				return fmt.Errorf("can't get ip address of node %s: %v", node.Name, err)
-			} else if len(addrs) == 0 {
-				return fmt.Errorf("no ip address for node %v", node.Name)
-			} else {
-				// check all ip addresses for this node.Name and try to find the first non-loopback IPv4 address.
-				// If no match is found, it uses the IP of the interface with gateway on it.
-				for _, ip := range addrs {
-					if ip.IsLoopback() {
-						continue
-					}
+		return nodeAddresses, nil
+	}
 
-					if ip.To4() != nil {
-						node.Status.Addresses = []api.NodeAddress{
-							{Type: api.NodeLegacyHostIP, Address: ip.String()},
-							{Type: api.NodeInternalIP, Address: ip.String()},
-						}
-						break
-					}
-				}
+	if kl.nodeIP != nil {
+		return []api.NodeAddress{
+			{Type: api.NodeLegacyHostIP, Address: kl.nodeIP.String()},
+			{Type: api.NodeInternalIP, Address: kl.nodeIP.String()},
+		}, nil
+	} else if addr := net.ParseIP(kl.hostname); addr != nil {
+		return []api.NodeAddress{
+			{Type: api.NodeLegacyHostIP, Address: addr.String()},
+			{Type: api.NodeInternalIP, Address: addr.String()},
+		}, nil
+	}
 
-				if len(node.Status.Addresses) == 0 {
-					ip, err := utilnet.ChooseHostInterface()
-					if err != nil {
-						return err
-					}
+	addrs, err := net.LookupIP(kl.nodeName)
+	if err != nil {
+		return []api.NodeAddress{}, fmt.Errorf("can't get ip address of node %s: %v", kl.nodeName, err)
+	} else if len(addrs) == 0 {
+		return []api.NodeAddress{}, fmt.Errorf("no ip address for node %v", kl.nodeName)
+	}
 
-					node.Status.Addresses = []api.NodeAddress{
-						{Type: api.NodeLegacyHostIP, Address: ip.String()},
-						{Type: api.NodeInternalIP, Address: ip.String()},
-					}
-				}
-			}
+	// check all ip addresses for this kl.nodeName and try to find the first non-loopback IPv4 address.
+	// If no match is found, it uses the IP of the interface with gateway on it.
+	for _, ip := range addrs {
+		if ip.IsLoopback() {
+			continue
+		}
+
+		if ip.To4() != nil {
+			return []api.NodeAddress{
+				{Type: api.NodeLegacyHostIP, Address: ip.String()},
+				{Type: api.NodeInternalIP, Address: ip.String()},
+			}, nil
 		}
 	}
-	return nil
+
+	ip, err := utilnet.ChooseHostInterface()
+	if err != nil {
+		return []api.NodeAddress{}, err
+	}
+
+	return []api.NodeAddress{
+		{Type: api.NodeLegacyHostIP, Address: ip.String()},
+		{Type: api.NodeInternalIP, Address: ip.String()},
+	}, nil
 }
 
 func (kl *Kubelet) setNodeStatusMachineInfo(node *api.Node) {
@@ -2953,9 +2954,12 @@ func (kl *Kubelet) recordNodeSchdulableEvent(node *api.Node) {
 // TODO(madhusudancs): Simplify the logic for setting node conditions and
 // refactor the node status condtion code out to a different file.
 func (kl *Kubelet) setNodeStatus(node *api.Node) error {
-	if err := kl.setNodeAddress(node); err != nil {
+	addrs, err := kl.getNodeAddresses()
+	if err != nil {
 		return err
 	}
+	node.Status.Addresses = addrs
+
 	kl.setNodeStatusInfo(node)
 	kl.setNodeOODCondition(node)
 	kl.setNodeReadyCondition(node)

@@ -81,7 +81,7 @@ func newTestDockerManagerWithHTTPClient(fakeHTTPClient *fakeHTTP) (*DockerManage
 	fakeDocker := NewFakeDockerClient()
 	fakeRecorder := &record.FakeRecorder{}
 	containerRefManager := kubecontainer.NewRefManager()
-	networkPlugin, _ := network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil))
+	networkPlugin, _ := network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil), []api.NodeAddress{})
 	optionGenerator := &fakeOptionGenerator{}
 	dockerManager := NewFakeDockerManager(
 		fakeDocker,

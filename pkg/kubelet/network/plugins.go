@@ -36,7 +36,7 @@ const DefaultPluginName = "kubernetes.io/no-op"
 type NetworkPlugin interface {
 	// Init initializes the plugin.  This will be called exactly once
 	// before any other methods are called.
-	Init(host Host) error
+	Init(host Host, nodeAddrs []api.NodeAddress) error
 
 	// Name returns the plugin's name. This will be used when searching
 	// for a plugin by name, e.g.
@@ -79,7 +79,7 @@ type Host interface {
 }
 
 // InitNetworkPlugin inits the plugin that matches networkPluginName. Plugins must have unique names.
-func InitNetworkPlugin(plugins []NetworkPlugin, networkPluginName string, host Host) (NetworkPlugin, error) {
+func InitNetworkPlugin(plugins []NetworkPlugin, networkPluginName string, host Host, nodeAddrs []api.NodeAddress) (NetworkPlugin, error) {
 	if networkPluginName == "" {
 		// default to the no_op plugin
 		plug := &noopNetworkPlugin{}
@@ -105,7 +105,7 @@ func InitNetworkPlugin(plugins []NetworkPlugin, networkPluginName string, host H
 
 	chosenPlugin := pluginMap[networkPluginName]
 	if chosenPlugin != nil {
-		err := chosenPlugin.Init(host)
+		err := chosenPlugin.Init(host, nodeAddrs)
 		if err != nil {
 			allErrs = append(allErrs, fmt.Errorf("Network plugin %q failed init: %v", networkPluginName, err))
 		} else {
@@ -125,7 +125,7 @@ func UnescapePluginName(in string) string {
 type noopNetworkPlugin struct {
 }
 
-func (plugin *noopNetworkPlugin) Init(host Host) error {
+func (plugin *noopNetworkPlugin) Init(host Host, nodeAddrs []api.NodeAddress) error {
 	return nil
 }
 

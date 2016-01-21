@@ -115,7 +115,7 @@ func newTestKubelet(t *testing.T) *TestKubelet {
 	kubelet.hostname = testKubeletHostname
 	kubelet.nodeName = testKubeletHostname
 	kubelet.runtimeState = newRuntimeState(maxWaitForContainerRuntime, false, "" /* Pod CIDR */, func() error { return nil })
-	kubelet.networkPlugin, _ = network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil))
+	kubelet.networkPlugin, _ = network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil), []api.NodeAddress{})
 	if tempDir, err := ioutil.TempDir("/tmp", "kubelet_test."); err != nil {
 		t.Fatalf("can't make a temp rootdir: %v", err)
 	} else {

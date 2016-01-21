@@ -18,11 +18,13 @@ package network
 
 import (
 	"testing"
+
+	"k8s.io/kubernetes/pkg/api"
 )
 
 func TestSelectDefaultPlugin(t *testing.T) {
 	all_plugins := []NetworkPlugin{}
-	plug, err := InitNetworkPlugin(all_plugins, "", NewFakeHost(nil))
+	plug, err := InitNetworkPlugin(all_plugins, "", NewFakeHost(nil), []api.NodeAddress{})
 	if err != nil {
 		t.Fatalf("Unexpected error in selecting default plugin: %v", err)
 	}

@@ -65,6 +65,7 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
+	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/network"
@@ -102,7 +103,7 @@ func ProbeNetworkPlugins(pluginDir string) []network.NetworkPlugin {
 	return execPlugins
 }
 
-func (plugin *execNetworkPlugin) Init(host network.Host) error {
+func (plugin *execNetworkPlugin) Init(host network.Host, nodeAddrs []api.NodeAddress) error {
 	err := plugin.validate()
 	if err != nil {
 		return err

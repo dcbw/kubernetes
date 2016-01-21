@@ -70,7 +70,7 @@ func TestRunOnce(t *testing.T) {
 	}
 	kb.containerManager = cm.NewStubContainerManager()
 
-	kb.networkPlugin, _ = network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil))
+	kb.networkPlugin, _ = network.InitNetworkPlugin([]network.NetworkPlugin{}, "", network.NewFakeHost(nil), []api.NodeAddress{})
 	if err := kb.setupDataDirs(); err != nil {
 		t.Errorf("Failed to init data dirs: %v", err)
 	}
