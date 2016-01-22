@@ -59,7 +59,9 @@ echo "$MASTER_IP $MASTER_NAME" >> /etc/hosts
 dnf -y --enablerepo=updates-testing install docker
 
 # Configure the master network
-provision-network-master
+if [ "${NETWORK_PROVIDER}" != "kubenet" ]; then
+  provision-network-master
+fi
 
 write-salt-config kubernetes-master
 

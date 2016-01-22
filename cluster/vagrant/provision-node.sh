@@ -55,7 +55,9 @@ done
 dnf -y --enablerepo=updates-testing install docker
 
 # Configure network
-provision-network-node
+if [ "${NETWORK_PROVIDER}" != "kubenet" ]; then
+  provision-network-node
+fi
 
 write-salt-config kubernetes-pool
 
