@@ -396,7 +396,8 @@ func NewMainKubelet(
 		return nil, fmt.Errorf("unsupported container runtime %q specified", containerRuntime)
 	}
 
-	klet.runtimeState = newRuntimeState(maxWaitForContainerRuntime, configureCBR0, podCIDR, klet.isContainerRuntimeVersionCompatible)
+	klet.runtimeState = newRuntimeState(maxWaitForContainerRuntime, configureCBR0, klet.isContainerRuntimeVersionCompatible)
+	klet.updatePodCIDR(podCIDR)
 
 	// setup containerGC
 	containerGC, err := kubecontainer.NewContainerGC(klet.containerRuntime, containerGCPolicy)
@@ -2632,9 +2633,7 @@ func (kl *Kubelet) syncNetworkStatus() {
 				glog.Infof("Flannel server handshake failed %v", err)
 				return
 			}
-			glog.Infof("Setting cidr: %v -> %v",
-				kl.runtimeState.podCIDR(), podCIDR)
-			kl.runtimeState.setPodCIDR(podCIDR)
+			kl.updatePodCIDR(podCIDR)
 		}
 		if err := ensureIPTablesMasqRule(kl.nonMasqueradeCIDR); err != nil {
 			err = fmt.Errorf("Error on adding ip table rules: %v", err)
@@ -3013,7 +3012,7 @@ func (kl *Kubelet) tryUpdateNodeStatus() error {
 			}
 		}
 	} else if kl.reconcileCIDR {
-		kl.runtimeState.setPodCIDR(node.Spec.PodCIDR)
+		kl.updatePodCIDR(node.Spec.PodCIDR)
 	}
 
 	if err := kl.setNodeStatus(node); err != nil {
@@ -3309,6 +3308,21 @@ func (kl *Kubelet) ListenAndServeReadOnly(address net.IP, port uint) {
 // is exported to simplify integration with third party kubelet extensions (e.g. kubernetes-mesos).
 func (kl *Kubelet) GetRuntime() kubecontainer.Runtime {
 	return kl.containerRuntime
+}
+
+func (kl *Kubelet) updatePodCIDR(cidr string) {
+	if kl.runtimeState.podCIDR() == cidr {
+		return
+	}
+
+	glog.Infof("Setting Pod CIDR: %v -> %v", kl.runtimeState.podCIDR(), cidr)
+	kl.runtimeState.setPodCIDR(cidr)
+
+	if kl.networkPlugin != nil {
+		details := make(map[string]interface{})
+		details[network.NET_PLUGIN_EVENT_POD_CIDR_CHANGE_DETAIL_CIDR] = cidr
+		kl.networkPlugin.Event(network.NET_PLUGIN_EVENT_POD_CIDR_CHANGE, details)
+	}
 }
 
 var minRsrc = resource.MustParse("1k")
