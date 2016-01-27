@@ -52,6 +52,8 @@ for (( i=0; i<${#NODE_NAMES[@]}; i++)); do
   fi
 done
 
+dnf -y --enablerepo=updates-testing install docker
+
 # Configure network
 provision-network-node
 
