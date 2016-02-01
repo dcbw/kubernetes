@@ -704,8 +704,6 @@ func TestSyncPodWithPodInfraCreatesContainer(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Inspect pod infra container (but does not create)"
-		"inspect_container",
 		// Create container.
 		"create", "start", "inspect_container",
 	})
@@ -792,8 +790,6 @@ func TestSyncPodDeletesDuplicate(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra container.
-		"inspect_container",
 		// Kill the duplicated container.
 		"stop",
 	})
@@ -830,8 +826,6 @@ func TestSyncPodBadHash(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra container.
-		"inspect_container",
 		// Kill and restart the bad hash container.
 		"stop", "create", "start", "inspect_container",
 	})
@@ -872,8 +866,6 @@ func TestSyncPodsUnhealthy(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra container.
-		"inspect_container",
 		// Kill the unhealthy container.
 		"stop",
 		// Restart the unhealthy container.
@@ -912,10 +904,7 @@ func TestSyncPodsDoesNothing(t *testing.T) {
 
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
-	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra contianer.
-		"inspect_container",
-	})
+	verifyCalls(t, fakeDocker, []string{})
 }
 
 func TestSyncPodWithRestartPolicy(t *testing.T) {
@@ -974,8 +963,6 @@ func TestSyncPodWithRestartPolicy(t *testing.T) {
 		{
 			api.RestartPolicyAlways,
 			[]string{
-				// Check the pod infra container.
-				"inspect_container",
 				// Restart both containers.
 				"create", "start", "inspect_container", "create", "start", "inspect_container",
 			},
@@ -985,8 +972,6 @@ func TestSyncPodWithRestartPolicy(t *testing.T) {
 		{
 			api.RestartPolicyOnFailure,
 			[]string{
-				// Check the pod infra container.
-				"inspect_container",
 				// Restart the failed container.
 				"create", "start", "inspect_container",
 			},
@@ -997,7 +982,7 @@ func TestSyncPodWithRestartPolicy(t *testing.T) {
 			api.RestartPolicyNever,
 			[]string{
 				// Check the pod infra container.
-				"inspect_container", "inspect_container", "inspect_container",
+				"inspect_container", "inspect_container",
 				// Stop the last pod infra container.
 				"stop",
 			},
@@ -1071,8 +1056,8 @@ func TestSyncPodBackoff(t *testing.T) {
 		},
 	}
 
-	startCalls := []string{"inspect_container", "create", "start", "inspect_container"}
-	backOffCalls := []string{"inspect_container"}
+	startCalls := []string{"create", "start", "inspect_container"}
+	backOffCalls := []string{}
 	startResult := &kubecontainer.SyncResult{kubecontainer.StartContainer, "bad", nil, ""}
 	backoffResult := &kubecontainer.SyncResult{kubecontainer.StartContainer, "bad", kubecontainer.ErrCrashLoopBackOff, ""}
 	tests := []struct {
@@ -1281,8 +1266,6 @@ func TestSyncPodWithPodInfraCreatesContainerCallsHandler(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra container.
-		"inspect_container",
 		// Create container.
 		"create", "start", "inspect_container",
 	})
@@ -1333,8 +1316,6 @@ func TestSyncPodEventHandlerFails(t *testing.T) {
 	runSyncPod(t, dm, fakeDocker, pod, nil, true)
 
 	verifyCalls(t, fakeDocker, []string{
-		// Check the pod infra container.
-		"inspect_container",
 		// Create the container.
 		"create", "start",
 		// Kill the container since event handler fails.
@@ -1455,7 +1436,7 @@ func TestSyncPodWithHostNetwork(t *testing.T) {
 
 	verifyCalls(t, fakeDocker, []string{
 		// Create pod infra container.
-		"create", "start", "inspect_container", "inspect_container",
+		"create", "start", "inspect_container",
 		// Create container.
 		"create", "start", "inspect_container",
 	})
