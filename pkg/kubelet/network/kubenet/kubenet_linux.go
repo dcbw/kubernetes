@@ -28,7 +28,6 @@ import (
 
 	"github.com/appc/cni/libcni"
 	"github.com/golang/glog"
-	"k8s.io/kubernetes/pkg/api"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/dockertools"
 	"k8s.io/kubernetes/pkg/kubelet/network"
@@ -59,57 +58,44 @@ func NewPlugin() network.NetworkPlugin {
 	}
 }
 
-func (plugin *kubenetNetworkPlugin) Init(host network.Host, nodeAddrs []api.NodeAddress) error {
+func (plugin *kubenetNetworkPlugin) Init(host network.Host) error {
 	plugin.host = host
 	plugin.cniConfig = &libcni.CNIConfig{
 		Path: []string{DefaultCNIDir},
 	}
 
-	// Grab MTU of interface that has the node address
-	link, err := getLinkForNodeAddress(nodeAddrs)
-	if err == nil {
-		plugin.MTU = link.Attrs().MTU
-		glog.V(5).Infof("Using host interface %s MTU %d as bridge MTU", link.Attrs().Name, plugin.MTU)
+	if link, err := findMinMTU(); err == nil {
+		plugin.MTU = link.MTU
+		glog.V(5).Infof("Using interface %s MTU %d as bridge MTU", link.Name, link.MTU)
 	} else {
-		glog.Warningf("%s", err)
+		glog.Warningf("Failed to find default bridge MTU: %v", err)
 	}
 
 	return nil
 }
 
-func getLinkForNodeAddress(nodeAddrs []api.NodeAddress) (netlink.Link, error) {
-	// Grab MTU of interface that has the node address
-	links, err := netlink.LinkList()
+func findMinMTU() (*net.Interface, error) {
+	intfs, err := net.Interfaces()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to list host links: %v", err)
+		return nil, err
 	}
 
-	nodeAddr := ""
-	for _, a := range nodeAddrs {
-		if a.Type == api.NodeInternalIP {
-			nodeAddr = a.Address
-			break
-		}
-	}
-	if len(nodeAddr) == 0 {
-		return nil, fmt.Errorf("Failed to determine node address")
-	}
-	ip := net.ParseIP(nodeAddr)
-	if ip == nil || ip.IsLoopback() {
-		return nil, fmt.Errorf("Invalid or loopback node address %s", nodeAddr)
-	}
-
-	for _, link := range links {
-		if addrs, err := netlink.AddrList(link, syscall.AF_INET); err == nil {
-			for _, addr := range addrs {
-				if addr.IPNet.IP.String() == nodeAddr {
-					return link, nil
-				}
+	mtu := 999999
+	defIntfIndex := -1
+	for i, intf := range intfs {
+		if ((intf.Flags & net.FlagUp) != 0) && (intf.Flags&(net.FlagLoopback|net.FlagPointToPoint) == 0) {
+			if intf.MTU < mtu {
+				mtu = intf.MTU
+				defIntfIndex = i
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("Failed to find host link for node address %s", nodeAddr)
+	if mtu >= 999999 || mtu < 576 || defIntfIndex < 0 {
+		return nil, fmt.Errorf("no suitable interface", BridgeName)
+	}
+
+	return &intfs[defIntfIndex], nil
 }
 
 const NET_CONFIG_TEMPLATE = `{
@@ -202,7 +188,7 @@ func (plugin *kubenetNetworkPlugin) SetUpPod(namespace string, name string, id k
 	if !ok {
 		return fmt.Errorf("Kubenet execution called on non-docker runtime")
 	}
-	netnsPath, err := runtime.GetNetNs(id.ContainerID())
+	netnsPath, err := runtime.GetNetNS(id.ContainerID())
 	if err != nil {
 		return err
 	}
@@ -245,7 +231,7 @@ func (plugin *kubenetNetworkPlugin) TearDownPod(namespace string, name string, i
 	if !ok {
 		return fmt.Errorf("Kubenet execution called on non-docker runtime")
 	}
-	netnsPath, err := runtime.GetNetNs(id.ContainerID())
+	netnsPath, err := runtime.GetNetNS(id.ContainerID())
 	if err != nil {
 		return err
 	}
