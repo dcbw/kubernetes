@@ -40,13 +40,18 @@ var (
 	ethtoolOutputRegex = regexp.MustCompile("peer_ifindex: (\\d+)")
 )
 
-func SetUpContainer(containerPid int, containerInterfaceName string) error {
+func SetUpContainerPid(containerPid int, containerInterfaceName string) error {
 	e := exec.New()
-	return setUpContainerInternal(e, containerPid, containerInterfaceName)
+	return setUpContainerInternal(e, containerPid, "", containerInterfaceName)
 }
 
-func setUpContainerInternal(e exec.Interface, containerPid int, containerInterfaceName string) error {
-	hostIfName, err := findPairInterfaceOfContainerInterface(e, containerPid, containerInterfaceName)
+func SetUpContainerPath(netnsPath string, containerInterfaceName string) error {
+	e := exec.New()
+	return setUpContainerInternal(e, -1, netnsPath, containerInterfaceName)
+}
+
+func setUpContainerInternal(e exec.Interface, containerPid int, netnsPath, containerInterfaceName string) error {
+	hostIfName, err := findPairInterfaceOfContainerInterface(e, containerPid, netnsPath, containerInterfaceName)
 	if err != nil {
 		glog.Infof("Unable to find pair interface, setting up all interfaces: %v", err)
 		return setUpAllInterfaces()
@@ -54,7 +59,7 @@ func setUpContainerInternal(e exec.Interface, containerPid int, containerInterfa
 	return setUpInterface(hostIfName)
 }
 
-func findPairInterfaceOfContainerInterface(e exec.Interface, containerPid int, containerInterfaceName string) (string, error) {
+func findPairInterfaceOfContainerInterface(e exec.Interface, containerPid int, netnsPath, containerInterfaceName string) (string, error) {
 	nsenterPath, err := e.LookPath("nsenter")
 	if err != nil {
 		return "", err
@@ -64,7 +69,20 @@ func findPairInterfaceOfContainerInterface(e exec.Interface, containerPid int, c
 		return "", err
 	}
 	// Get container's interface index
-	output, err := e.Command(nsenterPath, "-t", fmt.Sprintf("%d", containerPid), "-n", "-F", "--", ethtoolPath, "--statistics", containerInterfaceName).CombinedOutput()
+	var nsenterFlag, nsenterOpt string
+	if containerPid > 0 {
+		nsenterFlag = "-t"
+		nsenterOpt = fmt.Sprintf("%d", containerPid)
+	} else if netnsPath != "" {
+		if netnsPath[0] != '/' {
+			return "", fmt.Errorf("netnsPath path '%s' was invalid", netnsPath)
+		}
+		nsenterFlag = "-n"
+		nsenterOpt = netnsPath
+	} else {
+		return "", fmt.Errorf("neither containerPid or netnsPath were valid")
+	}
+	output, err := e.Command(nsenterPath, nsenterFlag, nsenterOpt, "-n", "-F", "--", ethtoolPath, "--statistics", containerInterfaceName).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("Unable to query interface %s of container %d: %v: %s", containerInterfaceName, containerPid, err, string(output))
 	}

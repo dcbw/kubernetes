@@ -69,7 +69,7 @@ func TestFindPairInterfaceOfContainerInterface(t *testing.T) {
 				return fmt.Sprintf("/fake-bin/%s", file), nil
 			},
 		}
-		name, err := findPairInterfaceOfContainerInterface(&fexec, 123, "eth0")
+		name, err := findPairInterfaceOfContainerInterface(&fexec, 123, "", "eth0")
 		if test.expectErr {
 			if err == nil {
 				t.Errorf("unexpected non-error")
