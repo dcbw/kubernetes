@@ -30,6 +30,9 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/network"
 	utilexec "k8s.io/kubernetes/pkg/util/exec"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -53,6 +56,8 @@ type cniNetworkPlugin struct {
 	pluginDir          string
 	binDir             string
 	vendorCNIDirPrefix string
+
+	kubeClient        *kubernetes.Clientset
 }
 
 type cniNetwork struct {
@@ -83,8 +88,6 @@ func probeNetworkPluginsWithVendorCNIDirPrefix(pluginDir, binDir, vendorCNIDirPr
 		vendorCNIDirPrefix: vendorCNIDirPrefix,
 	}
 
-	// sync NetworkConfig in best effort during probing.
-	plugin.syncNetworkConfig()
 	return []network.NetworkPlugin{plugin}
 }
 
@@ -171,8 +174,20 @@ func getLoNetwork(binDir, vendorDirPrefix string) *cniNetwork {
 	return loNetwork
 }
 
-func (plugin *cniNetworkPlugin) Init(host network.Host, hairpinMode componentconfig.HairpinMode, nonMasqueradeCIDR string, mtu int) error {
+func (plugin *cniNetworkPlugin) Init(host network.Host, hairpinMode componentconfig.HairpinMode, nonMasqueradeCIDR string, mtu int, kubeConfig string) error {
 	var err error
+
+	if kubeConfig != "" {
+		config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
+		if err != nil {
+			return fmt.Errorf("unable to read kubeconfig %q: %v", kubeConfig, err)
+		}
+		plugin.kubeClient, err = kubernetes.NewForConfig(config)
+		if err != nil {
+			return fmt.Errorf("unable to create kubernetes client with config %q: %v", kubeConfig, err)
+		}
+	}
+
 	plugin.nsenterPath, err = plugin.execer.LookPath("nsenter")
 	if err != nil {
 		return err

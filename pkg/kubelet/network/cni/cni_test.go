@@ -227,7 +227,7 @@ func TestCNIPlugin(t *testing.T) {
 	}
 	fakeHost := NewFakeHost(nil, pods, ports)
 
-	plug, err := network.InitNetworkPlugin(plugins, "cni", fakeHost, componentconfig.HairpinNone, "10.0.0.0/8", network.UseDefaultMTU)
+	plug, err := network.InitNetworkPlugin(plugins, "cni", fakeHost, componentconfig.HairpinNone, "10.0.0.0/8", network.UseDefaultMTU, "")
 	if err != nil {
 		t.Fatalf("Failed to select the desired plugin: %v", err)
 	}

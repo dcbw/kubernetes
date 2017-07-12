@@ -32,7 +32,7 @@ import (
 
 func TestSelectDefaultPlugin(t *testing.T) {
 	all_plugins := []network.NetworkPlugin{}
-	plug, err := network.InitNetworkPlugin(all_plugins, "", NewFakeHost(nil), componentconfig.HairpinNone, "10.0.0.0/8", network.UseDefaultMTU)
+	plug, err := network.InitNetworkPlugin(all_plugins, "", NewFakeHost(nil), componentconfig.HairpinNone, "10.0.0.0/8", network.UseDefaultMTU, "")
 	if err != nil {
 		t.Fatalf("Unexpected error in selecting default plugin: %v", err)
 	}
@@ -113,7 +113,7 @@ func newHookableFakeNetworkPlugin(setupHook hookableFakeNetworkPluginSetupHook) 
 	}
 }
 
-func (p *hookableFakeNetworkPlugin) Init(host network.Host, hairpinMode componentconfig.HairpinMode, nonMasqueradeCIDR string, mtu int) error {
+func (p *hookableFakeNetworkPlugin) Init(host network.Host, hairpinMode componentconfig.HairpinMode, nonMasqueradeCIDR string, mtu int, kubeConfig string) error {
 	return nil
 }
 

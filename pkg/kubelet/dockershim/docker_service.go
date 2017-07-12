@@ -106,6 +106,9 @@ type NetworkPluginSettings struct {
 	// MTU is the desired MTU for network devices created by the plugin.
 	MTU int
 
+	// Path to a kubeconfig file which can be used to create a kubernetes client
+	KubeConfigPath string
+
 	// RuntimeHost is an interface that serves as a trap-door from plugin back
 	// into the kubelet.
 	// TODO: This shouldn't be required, remove once we move host ports into CNI
@@ -200,7 +203,7 @@ func NewDockerService(client libdocker.Interface, seccompProfileRoot string, pod
 		&namespaceGetter{ds},
 		&portMappingGetter{ds},
 	}
-	plug, err := network.InitNetworkPlugin(cniPlugins, pluginSettings.PluginName, netHost, pluginSettings.HairpinMode, pluginSettings.NonMasqueradeCIDR, pluginSettings.MTU)
+	plug, err := network.InitNetworkPlugin(cniPlugins, pluginSettings.PluginName, netHost, pluginSettings.HairpinMode, pluginSettings.NonMasqueradeCIDR, pluginSettings.MTU, pluginSettings.KubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("didn't find compatible CNI plugin with given settings %+v: %v", pluginSettings, err)
 	}
