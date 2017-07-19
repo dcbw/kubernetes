@@ -1,0 +1,29 @@
+Use the files in this directory as examples for this implementation of multi-network support.
+
+1) place 10-dbnet.conf and 20-othernet.conf in /etc/cni/net.d so that the CNI driver
+knows how to invoke these "thin" networks.  You may need to modify 20-othernet.conf
+to replace "eth0" with the name of a network interface on the node.
+
+2) copy 'thick-plugin' to /opt/cni/bin
+
+3) Create the network object Custom Resource Definition with:
+	kubectl create -f network-crd.yaml
+
+4) Create the network objects themsevles with:
+	kubectl create -f dbnet.yaml
+	kubectl create -f othernet.yaml
+	kubectl create -f thick-plugin-example.yaml
+
+5) Create a pod that uses all 3 of these networks with:
+	kubectl create -f nginx.yaml
+
+If you wish to test out your own "thick" plugin, make sure it can accept a
+configuration that looks like:
+
+{
+  "cniVersion": "0.2.0",
+  "name": "<network name of the kube custom network resource>",
+  "type": "<your plugin binary name>"
+}
+
+

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx1
+  labels:
+    app: nginx
+  annotations:
+    alpha.network.k8s.io/networks: dbnet,othernet,thick-plugin-example
+spec:
+  containers:
+    - name: nginx1
+      image: nginx
+      ports:
+      - containerPort: 80
+

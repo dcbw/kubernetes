@@ -1,0 +1,8 @@
+apiVersion: alpha.network.k8s.io/v1
+kind: Network
+metadata:
+  name: thick-plugin-example
+  namespace: default
+spec:
+  plugin: thick-plugin
+

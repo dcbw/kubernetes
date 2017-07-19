@@ -1,0 +1,8 @@
+apiVersion: alpha.network.k8s.io/v1
+kind: Network
+metadata:
+  name: othernet
+  namespace: default
+spec:
+  plugin:
+

@@ -1,0 +1,7 @@
+#!/bin/bash
+fname=/tmp/cnitest-$(date +%s)
+cat > ${fname}
+echo >> ${fname}
+env | grep CNI_ >> ${fname}
+echo -n "{}"
+
