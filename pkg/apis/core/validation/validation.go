@@ -2980,6 +2980,16 @@ func ValidatePod(pod *core.Pod) field.ErrorList {
 		allErrs = append(allErrs, field.Invalid(specPath, hugePageResources, "must use a single hugepage size in a pod spec"))
 	}
 
+	// There should be no duplicates in list of Pod.IPs
+	statusPath := field.NewPath("status")
+	seen := make(map[string]int)
+	for idx, podIP := range pod.Status.PodIPs {
+		if atIdx, ok := seen[podIP.IP]; ok {
+			allErrs = append(allErrs, field.Forbidden(statusPath.Child("podIPs"), fmt.Sprintf("IP %v at idx:%v is duplicate at idx:%v", podIP.IP, idx, atIdx)))
+		} else {
+			seen[podIP.IP] = idx
+		}
+	}
 	return allErrs
 }
 

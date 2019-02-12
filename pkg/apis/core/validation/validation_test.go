@@ -3869,6 +3869,36 @@ func TestHugePagesIsolation(t *testing.T) {
 				DNSPolicy:     core.DNSClusterFirst,
 			},
 		},
+		{ // fails because of duplication in IPs.
+			ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "ns"},
+			Spec: core.PodSpec{
+				Containers: []core.Container{
+					{
+						Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File",
+						Resources: core.ResourceRequirements{
+							Requests: core.ResourceList{
+								core.ResourceName(core.ResourceCPU):    resource.MustParse("10"),
+								core.ResourceName(core.ResourceMemory): resource.MustParse("10G"),
+								core.ResourceName("hugepages-2Mi"):     resource.MustParse("1Gi"),
+							},
+							Limits: core.ResourceList{
+								core.ResourceName(core.ResourceCPU):    resource.MustParse("10"),
+								core.ResourceName(core.ResourceMemory): resource.MustParse("10G"),
+								core.ResourceName("hugepages-2Mi"):     resource.MustParse("1Gi"),
+							},
+						},
+					},
+				},
+				RestartPolicy: core.RestartPolicyAlways,
+				DNSPolicy:     core.DNSClusterFirst,
+			},
+			Status: core.PodStatus{
+				PodIPs: []core.PodIP{
+					{IP: "1.1.1.1"},
+					{IP: "1.1.1.1"},
+				},
+			},
+		},
 	}
 	for i := range successCases {
 		pod := &successCases[i]

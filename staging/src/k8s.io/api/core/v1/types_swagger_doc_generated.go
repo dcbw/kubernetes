@@ -1447,6 +1447,14 @@ func (PodExecOptions) SwaggerDoc() map[string]string {
 	return map_PodExecOptions
 }
 
+var map_PodIP = map[string]string{
+	"": "IP address information for entries in the (plural) PodIPs slice. Each entry includes:\n   IP: An IP address allocated to the pod. Routable at least within\n       the cluster.\n   Properties: Arbitrary metadata associated with the allocated IP.",
+}
+
+func (PodIP) SwaggerDoc() map[string]string {
+	return map_PodIP
+}
+
 var map_PodList = map[string]string{
 	"":         "PodList is a list of Pods.",
 	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
@@ -1577,6 +1585,7 @@ var map_PodStatus = map[string]string{
 	"initContainerStatuses": "The list has one entry per init container in the manifest. The most recent successful init container will have ready = true, the most recently started container will have startTime set. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status",
 	"containerStatuses":     "The list has one entry per container in the manifest. Each entry is currently the output of `docker inspect`. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status",
 	"qosClass":              "The Quality of Service (QOS) classification assigned to the pod based on resource requirements See PodQOSClass type for available QOS classes More info: https://git.k8s.io/community/contributors/design-proposals/node/resource-qos.md",
+	"podIPs":                "IP addresses allocated to the pod with associated metadata. This list is inclusive, i.e. it includes the default IP address stored in the \"PodIP\" field, and this default IP address must be recorded in the 0th entry (PodIPs[0]) of the slice. The list is empty if no IPs have been allocated yet.",
 }
 
 func (PodStatus) SwaggerDoc() map[string]string {

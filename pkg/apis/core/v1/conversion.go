@@ -35,6 +35,8 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	err := scheme.AddConversionFuncs(
 		Convert_core_Pod_To_v1_Pod,
 		Convert_core_PodSpec_To_v1_PodSpec,
+		Convert_v1_PodStatus_To_core_PodStatus,
+		Convert_core_PodStatus_To_v1_PodStatus,
 		Convert_core_NodeSpec_To_v1_NodeSpec,
 		Convert_v1_NodeSpec_To_core_NodeSpec,
 		Convert_core_ReplicationControllerSpec_To_v1_ReplicationControllerSpec,
@@ -269,6 +271,47 @@ func Convert_v1_PodTemplateSpec_To_core_PodTemplateSpec(in *v1.PodTemplateSpec, 
 	// drop init container annotations so they don't show up as differences when receiving requests from old clients
 	out.Annotations = dropInitContainerAnnotations(out.Annotations)
 
+	return nil
+}
+
+// Converts podStatus from v1 to core
+// auto + handling podIp/podIps
+func Convert_v1_PodStatus_To_core_PodStatus(in *v1.PodStatus, out *core.PodStatus, s conversion.Scope) error {
+	if err := autoConvert_v1_PodStatus_To_core_PodStatus(in, out, s); err != nil {
+		return err
+	}
+
+	// If both fields are provided, then test  in.PodIP == in.PodIPs[0]
+	if (len(in.PodIP) > 0 && len(in.PodIPs) > 0) && (in.PodIP != in.PodIPs[0].IP) {
+		return fmt.Errorf("conversion Error: in.PodIP(%v) != in.PodIPs[0](%v)", in.PodIP, in.PodIPs[0].IP)
+	}
+	// input has PodIP but not PodIPs
+	// Copy PodIP => PodIP[0]
+	if len(in.PodIP) > 0 && len(in.PodIPs) == 0 {
+		// PodIP + NO entries in PodIPs
+		out.PodIPs = []core.PodIP{
+			{
+				IP:         in.PodIP,
+				Properties: make(map[string]string),
+			},
+		}
+	}
+	return nil
+}
+
+// Converts podStatus from core to v1
+// auto + handling podIp/podIps
+func Convert_core_PodStatus_To_v1_PodStatus(in *core.PodStatus, out *v1.PodStatus, s conversion.Scope) error {
+	if err := autoConvert_core_PodStatus_To_v1_PodStatus(in, out, s); err != nil {
+		return err
+	}
+	// handle ip/ips fields
+	//v1.PodIP gets the out.PodIps[0]
+	//v1.PodIPs gets the entire list of PodIPs
+	// via auto convert
+	if len(in.PodIPs) > 0 {
+		out.PodIP = in.PodIPs[0].IP
+	}
 	return nil
 }
 

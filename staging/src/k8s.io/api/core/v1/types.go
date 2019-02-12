@@ -3116,6 +3116,16 @@ type PodDNSConfigOption struct {
 	Value *string `json:"value,omitempty" protobuf:"bytes,2,opt,name=value"`
 }
 
+// IP address information for entries in the (plural) PodIPs slice.
+// Each entry includes:
+//    IP: An IP address allocated to the pod. Routable at least within
+//        the cluster.
+//    Properties: Arbitrary metadata associated with the allocated IP.
+type PodIP struct {
+	IP         string            `json:"ip,omitempty" protobuf:"bytes,1,opt,name=ip"`
+	Properties map[string]string `json:"properties,omitempty" protobuf:"bytes,2,rep,name=properties"`
+}
+
 // PodStatus represents information about the status of a pod. Status may trail the actual
 // state of a system, especially if the node that hosts the pod cannot contact the control
 // plane.
@@ -3192,6 +3202,12 @@ type PodStatus struct {
 	// More info: https://git.k8s.io/community/contributors/design-proposals/node/resource-qos.md
 	// +optional
 	QOSClass PodQOSClass `json:"qosClass,omitempty" protobuf:"bytes,9,rep,name=qosClass"`
+	// IP addresses allocated to the pod with associated metadata. This list
+	// is inclusive, i.e. it includes the default IP address stored in the
+	// "PodIP" field, and this default IP address must be recorded in the
+	// 0th entry (PodIPs[0]) of the slice. The list is empty if no IPs have
+	// been allocated yet.
+	PodIPs []PodIP `json:"podIPs,omitempty" protobuf:"bytes,12,rep,name=podIPs"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
