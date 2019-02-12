@@ -346,3 +346,85 @@ func roundTripRS(t *testing.T, rs *apps.ReplicaSet) *apps.ReplicaSet {
 	}
 	return obj3
 }
+
+func Test_core_NodeSpec_to_v1_NodeSpec(t *testing.T) {
+	// core to v1
+	testInputs := []core.NodeSpec{
+		core.NodeSpec{
+			PodCIDRs: []string{"10.0.0.0/24", "10.0.1.0/24"},
+		},
+		core.NodeSpec{
+			PodCIDRs: []string{"10.0.0.0/24", "ace:cab:deca::/8"},
+		},
+	}
+
+	for _, testInput := range testInputs {
+		v1NodeSpec := v1.NodeSpec{}
+		// convert
+		if err := corev1.Convert_core_NodeSpec_To_v1_NodeSpec(&testInput, &v1NodeSpec, nil); nil != err {
+			t.Errorf("Convert core.NodeSpec to v1.NodeSpec failed with error %v", err.Error())
+		}
+
+		// validate results
+		if v1NodeSpec.PodCIDR != testInput.PodCIDRs[0] {
+			t.Errorf("Convert core.NodeSpec to v1.NodeSpec failed. Expected v1.PodCIDR=%v but found %v", testInput.PodCIDRs[0], v1NodeSpec.PodCIDR)
+		}
+
+		// match v1.PodIPs to core.PodIPs
+		for idx := range testInput.PodCIDRs {
+			if v1NodeSpec.PodCIDRs[idx] != testInput.PodCIDRs[idx] {
+				t.Errorf("Convert core.NodeSpec to v1.NodeSpec failed. Expected v1.NodeSpec[%v]=%v but found %v", idx, testInput.PodCIDRs[idx], v1NodeSpec.PodCIDRs[idx])
+			}
+		}
+	}
+}
+
+func Test_v1_NodeSpec_to_core_NodeSpec(t *testing.T) {
+
+	failInputs := []v1.NodeSpec{
+		v1.NodeSpec{
+			PodCIDR:  "10.0.0.0/24",
+			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
+		},
+	}
+
+	testInputs := []v1.NodeSpec{
+		// Both are provided
+		v1.NodeSpec{
+			PodCIDR:  "10.0.1.0/24",
+			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
+		},
+		// list only
+		v1.NodeSpec{
+			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
+		},
+		// cidr only
+		v1.NodeSpec{
+			PodCIDR: "10.0.1.0/24",
+		},
+	}
+
+	// fail cases
+	for _, failInput := range failInputs {
+		coreNodeSpec := core.NodeSpec{}
+		if err := corev1.Convert_v1_NodeSpec_To_core_NodeSpec(&failInput, &coreNodeSpec, nil); err == nil {
+			t.Errorf("Convert v1.NodeSpec to core.NodeSpec failed. Expected an error when coreNodeSpec.PodCIDR != coreNodeSpec.PodCIDRs[0]")
+		}
+	}
+
+	for _, testInput := range testInputs {
+		coreNodeSpec := core.NodeSpec{}
+		if err := corev1.Convert_v1_NodeSpec_To_core_NodeSpec(&testInput, &coreNodeSpec, nil); err != nil {
+			t.Errorf("Convert v1.NodeSpec to core.NodeSpec failed with error:%v", err.Error())
+		}
+		if len(testInput.PodCIDR) > 0 && coreNodeSpec.PodCIDRs[0] != testInput.PodCIDR {
+			t.Errorf("Convert v1.NodeSpec to core.NodeSpec failed. expected coreNodeSpec.PodCIDRs[0]=%v found %v", testInput.PodCIDR, coreNodeSpec.PodCIDRs[0])
+		}
+		// match ip list
+		for idx := range testInput.PodCIDRs {
+			if coreNodeSpec.PodCIDRs[idx] != testInput.PodCIDRs[idx] {
+				t.Errorf("Convert v1.NodeSpec to core.NodeSpec failed core.PodCIDRs[%v]=%v expected %v", idx, coreNodeSpec.PodCIDRs[idx], testInput.PodCIDRs[idx])
+			}
+		}
+	}
+}

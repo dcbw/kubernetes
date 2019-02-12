@@ -35,6 +35,8 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	err := scheme.AddConversionFuncs(
 		Convert_core_Pod_To_v1_Pod,
 		Convert_core_PodSpec_To_v1_PodSpec,
+		Convert_core_NodeSpec_To_v1_NodeSpec,
+		Convert_v1_NodeSpec_To_core_NodeSpec,
 		Convert_core_ReplicationControllerSpec_To_v1_ReplicationControllerSpec,
 		Convert_core_ServiceSpec_To_v1_ServiceSpec,
 		Convert_v1_Pod_To_core_Pod,
@@ -289,6 +291,35 @@ func Convert_core_PodSpec_To_v1_PodSpec(in *core.PodSpec, out *v1.PodSpec, s con
 		out.ShareProcessNamespace = in.SecurityContext.ShareProcessNamespace
 	}
 
+	return nil
+}
+
+// The following NodeSpec conversions functions focus on converting
+// NodeSpec.PodCIDR -> NodeSpec.PodCIDRs
+func Convert_core_NodeSpec_To_v1_NodeSpec(in *core.NodeSpec, out *v1.NodeSpec, s conversion.Scope) error {
+	if err := autoConvert_core_NodeSpec_To_v1_NodeSpec(in, out, s); err != nil {
+		return err
+	}
+	if len(in.PodCIDRs) > 0 {
+		out.PodCIDR = in.PodCIDRs[0]
+	}
+	out.PodCIDRs = in.PodCIDRs
+	return nil
+}
+func Convert_v1_NodeSpec_To_core_NodeSpec(in *v1.NodeSpec, out *core.NodeSpec, s conversion.Scope) error {
+	if err := autoConvert_v1_NodeSpec_To_core_NodeSpec(in, out, s); err != nil {
+		return err
+	}
+	// handle cidr/cidrs fields
+	// if in.PodCIDR and in.PodCIDRs are provided then test in.PodCIDR == in.PodCIDRs[0]
+	if (len(in.PodCIDR) > 0 && len(in.PodCIDRs) > 0) && (in.PodCIDR != in.PodCIDRs[0]) {
+		return fmt.Errorf("conversion Error: in.PodCIDR(%v) != in.CIDRs[0](%v)", in.PodCIDR, in.PodCIDRs[0])
+	}
+	if len(in.PodCIDR) > 0 && len(in.PodCIDRs) == 0 {
+		// CIDR + NO entries in CIDRs
+		// copy node.PodCIDR[0] = node.PodCIDR
+		out.PodCIDRs = []string{in.PodCIDR}
+	}
 	return nil
 }
 

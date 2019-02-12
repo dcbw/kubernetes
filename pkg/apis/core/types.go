@@ -3458,7 +3458,7 @@ type NodeSpec struct {
 	// PodCIDR represents the pod IP range assigned to the node
 	// Note: assigning IP ranges to nodes might need to be revisited when we support migratable IPs.
 	// +optional
-	PodCIDR string
+	PodCIDRs []string
 
 	// ID of the node assigned by the cloud provider
 	// Note: format is "<ProviderName>://<ProviderSpecificNodeID>"

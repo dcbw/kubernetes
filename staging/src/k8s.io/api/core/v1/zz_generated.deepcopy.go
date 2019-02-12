@@ -2482,6 +2482,11 @@ func (in *NodeSpec) DeepCopyInto(out *NodeSpec) {
 		*out = new(NodeConfigSource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PodCIDRs != nil {
+		in, out := &in.PodCIDRs, &out.PodCIDRs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
