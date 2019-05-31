@@ -41,9 +41,11 @@ import (
 	clientretry "k8s.io/client-go/util/retry"
 	cloudprovider "k8s.io/cloud-provider"
 	"k8s.io/kubernetes/pkg/controller"
-	nodeutil "k8s.io/kubernetes/pkg/controller/util/node"
 	"k8s.io/kubernetes/pkg/util/metrics"
 	utilnode "k8s.io/kubernetes/pkg/util/node"
+
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	kubefeatures "k8s.io/kubernetes/pkg/features"
 )
 
 const (
@@ -62,19 +64,19 @@ type RouteController struct {
 	routes           cloudprovider.Routes
 	kubeClient       clientset.Interface
 	clusterName      string
-	clusterCIDR      *net.IPNet
+	clusterCIDRs     []*net.IPNet
 	nodeLister       corelisters.NodeLister
 	nodeListerSynced cache.InformerSynced
 	broadcaster      record.EventBroadcaster
 	recorder         record.EventRecorder
 }
 
-func New(routes cloudprovider.Routes, kubeClient clientset.Interface, nodeInformer coreinformers.NodeInformer, clusterName string, clusterCIDR *net.IPNet) *RouteController {
+func New(routes cloudprovider.Routes, kubeClient clientset.Interface, nodeInformer coreinformers.NodeInformer, clusterName string, clusterCIDRs []*net.IPNet) *RouteController {
 	if kubeClient != nil && kubeClient.CoreV1().RESTClient().GetRateLimiter() != nil {
 		metrics.RegisterMetricAndTrackRateLimiterUsage("route_controller", kubeClient.CoreV1().RESTClient().GetRateLimiter())
 	}
 
-	if clusterCIDR == nil {
+	if len(clusterCIDRs) == 0 {
 		klog.Fatal("RouteController: Must specify clusterCIDR.")
 	}
 
@@ -86,7 +88,7 @@ func New(routes cloudprovider.Routes, kubeClient clientset.Interface, nodeInform
 		routes:           routes,
 		kubeClient:       kubeClient,
 		clusterName:      clusterName,
-		clusterCIDR:      clusterCIDR,
+		clusterCIDRs:     clusterCIDRs,
 		nodeLister:       nodeInformer.Lister(),
 		nodeListerSynced: nodeInformer.Informer().HasSynced,
 		broadcaster:      eventBroadcaster,
@@ -138,31 +140,42 @@ func (rc *RouteController) reconcileNodeRoutes() error {
 
 func (rc *RouteController) reconcile(nodes []*v1.Node, routes []*cloudprovider.Route) error {
 	// nodeCIDRs maps nodeName->nodeCIDR
-	nodeCIDRs := make(map[types.NodeName]string)
+	nodeCIDRs := make(map[types.NodeName][]string)
 	// routeMap maps routeTargetNode->route
-	routeMap := make(map[types.NodeName]*cloudprovider.Route)
+	routeMap := make(map[types.NodeName][]*cloudprovider.Route)
 	for _, route := range routes {
 		if route.TargetNode != "" {
-			routeMap[route.TargetNode] = route
+			routeMap[route.TargetNode] = append(routeMap[route.TargetNode], route)
 		}
 	}
 
 	wg := sync.WaitGroup{}
 	rateLimiter := make(chan struct{}, maxConcurrentRouteCreations)
+	// searches existing routes by node for a matching route
 
 	for _, node := range nodes {
 		// Skip if the node hasn't been assigned a CIDR yet.
-		if node.Spec.PodCIDR == "" {
+		if 0 == len(node.Spec.PodCIDRs) {
 			continue
 		}
 		nodeName := types.NodeName(node.Name)
-		// Check if we have a route for this node w/ the correct CIDR.
-		r := routeMap[nodeName]
-		if r == nil || r.DestinationCIDR != node.Spec.PodCIDR {
-			// If not, create the route.
+		// for every node, for every cidr
+		for idx, podCIDR := range node.Spec.PodCIDRs {
+			// ignore all but first cidr if dualstack is *not* enabled
+			if idx > 0 && !utilfeature.DefaultFeatureGate.Enabled(kubefeatures.IPv6DualStack) {
+				klog.Infof("route controller found more than one cidr for node:%v and dual stack is not enabled, ignore all but first", nodeName)
+				break
+			}
+			// we add it to our nodeCIDRs map here because add and delete go routines run at the same time
+			nodeCIDRs[nodeName] = append(nodeCIDRs[nodeName], podCIDR)
+			// ignore if already created
+			if hasRoute(routeMap, nodeName, podCIDR) {
+				continue
+			}
+			// if we are here, then a route needs to be created for this node
 			route := &cloudprovider.Route{
 				TargetNode:      nodeName,
-				DestinationCIDR: node.Spec.PodCIDR,
+				DestinationCIDR: podCIDR,
 			}
 			nameHint := string(node.UID)
 			wg.Add(1)
@@ -176,7 +189,6 @@ func (rc *RouteController) reconcile(nodes []*v1.Node, routes []*cloudprovider.R
 					klog.Infof("Creating route for node %s %s with hint %s, throttled %v", nodeName, route.DestinationCIDR, nameHint, time.Since(startTime))
 					err := rc.routes.CreateRoute(context.TODO(), rc.clusterName, nameHint, route)
 					<-rateLimiter
-
 					rc.updateNetworkingCondition(nodeName, err == nil)
 					if err != nil {
 						msg := fmt.Sprintf("Could not create route %s %s for node %s after %v: %v", nameHint, route.DestinationCIDR, nodeName, time.Since(startTime), err)
@@ -199,23 +211,30 @@ func (rc *RouteController) reconcile(nodes []*v1.Node, routes []*cloudprovider.R
 					klog.Errorf("Could not create route %s %s for node %s: %v", nameHint, route.DestinationCIDR, nodeName, err)
 				}
 			}(nodeName, nameHint, route)
-		} else {
-			// Update condition only if it doesn't reflect the current state.
-			_, condition := nodeutil.GetNodeCondition(&node.Status, v1.NodeNetworkUnavailable)
-			if condition == nil || condition.Status != v1.ConditionFalse {
-				rc.updateNetworkingCondition(types.NodeName(node.Name), true)
+		}
+	}
+
+	// searches our bag of node->cidrs for a match
+	nodeHasCidr := func(nodeName types.NodeName, cidr string) bool {
+		if podCIDRs, ok := nodeCIDRs[nodeName]; ok {
+			for _, podCIDR := range podCIDRs {
+				if podCIDR == cidr {
+					return true
+				}
 			}
 		}
-		nodeCIDRs[nodeName] = node.Spec.PodCIDR
+		return false
 	}
+	// delete routes that are not in use
 	for _, route := range routes {
 		if rc.isResponsibleForRoute(route) {
 			// Check if this route is a blackhole, or applies to a node we know about & has an incorrect CIDR.
-			if route.Blackhole || (nodeCIDRs[route.TargetNode] != route.DestinationCIDR) {
+			if route.Blackhole || !nodeHasCidr(route.TargetNode, route.DestinationCIDR) {
 				wg.Add(1)
 				// Delete the route.
 				go func(route *cloudprovider.Route, startTime time.Time) {
 					defer wg.Done()
+					// respect the rate limiter
 					rateLimiter <- struct{}{}
 					klog.Infof("Deleting route %s %s", route.Name, route.DestinationCIDR)
 					if err := rc.routes.DeleteRoute(context.TODO(), rc.clusterName, route); err != nil {
@@ -279,8 +298,24 @@ func (rc *RouteController) isResponsibleForRoute(route *cloudprovider.Route) boo
 	for i := range lastIP {
 		lastIP[i] = cidr.IP[i] | ^cidr.Mask[i]
 	}
-	if !rc.clusterCIDR.Contains(cidr.IP) || !rc.clusterCIDR.Contains(lastIP) {
-		return false
+
+	// check across all cluster cidrs
+	for _, clusterCIDR := range rc.clusterCIDRs {
+		if clusterCIDR.Contains(cidr.IP) || clusterCIDR.Contains(lastIP) {
+			return true
+		}
 	}
-	return true
+	return false
+}
+
+// checks if a node owns a route with a specific cidr
+func hasRoute(rm map[types.NodeName][]*cloudprovider.Route, nodeName types.NodeName, cidr string) bool {
+	if routes, ok := rm[nodeName]; ok {
+		for _, route := range routes {
+			if route.DestinationCIDR == cidr {
+				return true
+			}
+		}
+	}
+	return false
 }
