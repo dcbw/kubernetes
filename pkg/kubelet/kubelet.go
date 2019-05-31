@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1521,7 +1522,10 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	// TODO(random-liu): After writing pod spec into container labels, check whether pod is using host network, and
 	// set pod IP to hostIP directly in runtime.GetPodStatus
 	podStatus.IP = apiPodStatus.PodIP
-
+	podStatus.IPs = []string{}
+	for _, ipInfo := range apiPodStatus.PodIPs {
+		podStatus.IPs = append(podStatus.IPs, ipInfo.IP)
+	}
 	// Record the time it takes for the pod to become running.
 	existingStatus, ok := kl.statusManager.GetPodStatus(pod.UID)
 	if !ok || existingStatus.Phase == v1.PodPending && apiPodStatus.Phase == v1.PodRunning &&
@@ -2243,9 +2247,10 @@ func (kl *Kubelet) fastStatusUpdateOnce() {
 			klog.Errorf(err.Error())
 			continue
 		}
-		if node.Spec.PodCIDR != "" {
-			if _, err := kl.updatePodCIDR(node.Spec.PodCIDR); err != nil {
-				klog.Errorf("Pod CIDR update failed %v", err)
+		if len(node.Spec.PodCIDRs) != 0 {
+			podCIDRs := strings.Join(node.Spec.PodCIDRs, ",")
+			if _, err := kl.updatePodCIDR(podCIDRs); err != nil {
+				klog.Errorf("Pod CIDR update to %v failed %v", podCIDRs, err)
 				continue
 			}
 			kl.updateRuntimeUp()
