@@ -2847,6 +2847,13 @@ type PodDNSConfigOption struct {
 	Value *string
 }
 
+// IP address information. Each entry includes:
+//    IP: An IP address allocated to the pod. Routable at least within
+//        the cluster.
+type PodIP struct {
+	IP string
+}
+
 // PodStatus represents information about the status of a pod. Status may trail the actual
 // state of a system.
 type PodStatus struct {
@@ -2870,8 +2877,10 @@ type PodStatus struct {
 
 	// +optional
 	HostIP string
+
+	// IP addresses allocated to the pod.
 	// +optional
-	PodIP string
+	PodIPs []PodIP
 
 	// Date and time at which the object was acknowledged by the Kubelet.
 	// This is before the Kubelet pulled the container image(s) for the pod.
@@ -3455,10 +3464,10 @@ type EndpointsList struct {
 
 // NodeSpec describes the attributes that a node is created with.
 type NodeSpec struct {
-	// PodCIDR represents the pod IP range assigned to the node
+	// PodCIDRs represents the pod IP range assigned to the node
 	// Note: assigning IP ranges to nodes might need to be revisited when we support migratable IPs.
 	// +optional
-	PodCIDR string
+	PodCIDRs []string
 
 	// ID of the node assigned by the cloud provider
 	// Note: format is "<ProviderName>://<ProviderSpecificNodeID>"
