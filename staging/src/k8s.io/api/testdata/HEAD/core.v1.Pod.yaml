@@ -755,5 +755,7 @@ status:
   nominatedNodeName: "320"
   phase: 闎Ť萃Q+駟à稨氙'[>
   podIP: "322"
+  podIPs:
+  - ip: "351"
   qosClass: 蘋`翾'ųŎ群E牬庘颮6(|ǖ
   reason: "319"

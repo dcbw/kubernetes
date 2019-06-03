@@ -114,5 +114,7 @@ status:
   nominatedNodeName: "28"
   phase: ƗǸƢ6/ʕV
   podIP: "30"
+  podIPs:
+  - ip: "59"
   qosClass: ƕP喂ƈ
   reason: "27"
