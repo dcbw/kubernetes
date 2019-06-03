@@ -66,10 +66,10 @@ func TestDecodeSinglePod(t *testing.T) {
 		Status: v1.PodStatus{
 			PodIP: "1.2.3.4",
 			PodIPs: []v1.PodIP{
-				v1.PodIP{
+				{
 					IP: "1.2.3.4",
 				},
-				v1.PodIP{
+				{
 					IP: "f318:7d0:5aa8:4f55:e29c:9281:8483:b3a",
 				},
 			},
@@ -142,10 +142,10 @@ func TestDecodePodList(t *testing.T) {
 		Status: v1.PodStatus{
 			PodIP: "1.2.3.4",
 			PodIPs: []v1.PodIP{
-				v1.PodIP{
+				{
 					IP: "1.2.3.4",
 				},
-				v1.PodIP{
+				{
 					IP: "f318:7d0:5aa8:4f55:e29c:9281:8483:b3a",
 				},
 			},
