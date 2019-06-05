@@ -90,7 +90,7 @@ func (m *kubeGenericRuntimeManager) recordContainerEvent(pod *v1.Pod, container 
 // * create the container
 // * start the container
 // * run the post start lifecycle hooks (if applicable)
-func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandboxConfig *runtimeapi.PodSandboxConfig, container *v1.Container, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, podIP string) (string, error) {
+func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandboxConfig *runtimeapi.PodSandboxConfig, container *v1.Container, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, podIPs []string) (string, error) {
 	// Step 1: pull the image.
 	imageRef, msg, err := m.imagePuller.EnsureImageExists(pod, container, pullSecrets, podSandboxConfig)
 	if err != nil {
@@ -112,7 +112,7 @@ func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandb
 		restartCount = containerStatus.RestartCount + 1
 	}
 
-	containerConfig, cleanupAction, err := m.generateContainerConfig(container, pod, restartCount, podIP, imageRef)
+	containerConfig, cleanupAction, err := m.generateContainerConfig(container, pod, restartCount, podIPs, imageRef)
 	if cleanupAction != nil {
 		defer cleanupAction()
 	}
@@ -188,8 +188,8 @@ func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandb
 }
 
 // generateContainerConfig generates container config for kubelet runtime v1.
-func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Container, pod *v1.Pod, restartCount int, podIP, imageRef string) (*runtimeapi.ContainerConfig, func(), error) {
-	opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(pod, container, podIP)
+func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Container, pod *v1.Pod, restartCount int, podIPs []string, imageRef string) (*runtimeapi.ContainerConfig, func(), error) {
+	opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(pod, container, podIPs)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -716,17 +716,9 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		}
 	}
 
-	// the start containers routines depend on pod ip(as in primary pod ip)
-	// instead of trying to figure out if we have 0 < len(podIPs)
-	// everytime, we short circuit it here
-	podIP := ""
-	if len(podIPs) != 0 {
-		podIP = podIPs[0]
-	}
-
 	// There are situations where pod.IPs will not be reported correctly (host network is one of them)
-	if len(podIP) == 0 && podStatus != nil {
-		podIP = podStatus.IP
+	if len(podIPs) == 0 && podStatus != nil {
+		podIPs = podStatus.IPs
 	}
 
 	// Get podSandboxConfig for containers to start.
@@ -753,7 +745,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		}
 
 		klog.V(4).Infof("Creating init container %+v in pod %v", container, format.Pod(pod))
-		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIP); err != nil {
+		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIPs); err != nil {
 			startContainerResult.Fail(err, msg)
 			utilruntime.HandleError(fmt.Errorf("init container start failed: %v: %s", err, msg))
 			return
@@ -777,7 +769,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		}
 
 		klog.V(4).Infof("Creating container %+v in pod %v", container, format.Pod(pod))
-		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIP); err != nil {
+		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, container, pod, podStatus, pullSecrets, podIPs); err != nil {
 			startContainerResult.Fail(err, msg)
 			// known errors that are logged in other places are logged at higher levels here to avoid
 			// repetitive log spam
@@ -889,7 +881,6 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 	klog.V(4).Infof("getSandboxIDByPodUID got sandbox IDs %q for pod %q", podSandboxIDs, podFullName)
 
 	sandboxStatuses := make([]*runtimeapi.PodSandboxStatus, len(podSandboxIDs))
-	podIP := ""
 	podIPs := []string{}
 	for idx, podSandboxID := range podSandboxIDs {
 		podSandboxStatus, err := m.runtimeService.PodSandboxStatus(podSandboxID)
@@ -902,9 +893,6 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 		// Only get pod IP from latest sandbox
 		if idx == 0 && podSandboxStatus.State == runtimeapi.PodSandboxState_SANDBOX_READY {
 			podIPs = m.determinePodSandboxIPs(namespace, name, podSandboxStatus)
-			if len(podIPs) != 0 {
-				podIP = podIPs[0]
-			}
 		}
 	}
 
@@ -922,7 +910,6 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 		ID:                uid,
 		Name:              name,
 		Namespace:         namespace,
-		IP:                podIP,
 		IPs:               podIPs,
 		SandboxStatuses:   sandboxStatuses,
 		ContainerStatuses: containerStatuses,

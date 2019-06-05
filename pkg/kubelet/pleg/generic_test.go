@@ -583,10 +583,10 @@ func TestRelistIPChange(t *testing.T) {
 		ID:         id,
 		Containers: []*kubecontainer.Container{container},
 	}
-	ipAddr := "192.168.1.5/24"
+	ipAddrs := []string{"192.168.1.5/24"}
 	status := &kubecontainer.PodStatus{
 		ID:                id,
-		IP:                ipAddr,
+		IPs:               ipAddrs,
 		ContainerStatuses: []*kubecontainer.ContainerStatus{{ID: container.ID, State: cState}},
 	}
 	event := &PodLifecycleEvent{ID: pod.ID, Type: ContainerStarted, Data: container.ID.ID}
@@ -621,7 +621,7 @@ func TestRelistIPChange(t *testing.T) {
 	// Must copy status to compare since its pointer gets passed through all
 	// the way to the event
 	statusCopy := *status
-	statusCopy.IP = ipAddr
+	statusCopy.IPs = ipAddrs
 	assert.Equal(t, &statusCopy, actualStatus, "test0")
 	assert.Nil(t, actualErr, "test0")
 	assert.Exactly(t, []*PodLifecycleEvent{event}, actualEvents)

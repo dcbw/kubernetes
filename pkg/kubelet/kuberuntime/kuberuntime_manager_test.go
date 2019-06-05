@@ -143,7 +143,7 @@ func makeFakeContainer(t *testing.T, m *kubeGenericRuntimeManager, template cont
 	sandboxConfig, err := m.generatePodSandboxConfig(template.pod, template.sandboxAttempt)
 	assert.NoError(t, err, "generatePodSandboxConfig for container template %+v", template)
 
-	containerConfig, _, err := m.generateContainerConfig(template.container, template.pod, template.attempt, "", template.container.Image)
+	containerConfig, _, err := m.generateContainerConfig(template.container, template.pod, template.attempt, []string{}, template.container.Image)
 	assert.NoError(t, err, "generateContainerConfig for container template %+v", template)
 
 	podSandboxID := apitest.BuildSandboxName(sandboxConfig.Metadata)
@@ -311,7 +311,7 @@ func TestGetPodStatus(t *testing.T) {
 	assert.Equal(t, pod.UID, podStatus.ID)
 	assert.Equal(t, pod.Name, podStatus.Name)
 	assert.Equal(t, pod.Namespace, podStatus.Namespace)
-	assert.Equal(t, apitest.FakePodSandboxIP, podStatus.IP)
+	assert.Equal(t, apitest.FakePodSandboxIP, podStatus.IPs[0])
 }
 
 func TestGetPods(t *testing.T) {

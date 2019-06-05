@@ -97,7 +97,7 @@ func TestDisabledSubpath(t *testing.T) {
 
 	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeSubpath, false)()
 	for name, test := range cases {
-		_, _, err := makeMounts(&pod, "/pod", &test.container, "fakepodname", "", "", podVolumes, fm, fsp, nil)
+		_, _, err := makeMounts(&pod, "/pod", &test.container, "fakepodname", "", []string{}, podVolumes, fm, fsp, nil)
 		if err != nil && !test.expectError {
 			t.Errorf("test %v failed: %v", name, err)
 		}
@@ -243,14 +243,14 @@ func writeHostsFile(filename string, cfg string) (string, error) {
 
 func TestManagedHostsFileContent(t *testing.T) {
 	testCases := []struct {
-		hostIP          string
+		hostIPs         []string
 		hostName        string
 		hostDomainName  string
 		hostAliases     []v1.HostAlias
 		expectedContent string
 	}{
 		{
-			"123.45.67.89",
+			[]string{"123.45.67.89"},
 			"podFoo",
 			"",
 			[]v1.HostAlias{},
@@ -265,7 +265,7 @@ fe00::2	ip6-allrouters
 `,
 		},
 		{
-			"203.0.113.1",
+			[]string{"203.0.113.1"},
 			"podFoo",
 			"domainFoo",
 			[]v1.HostAlias{},
@@ -280,7 +280,7 @@ fe00::2	ip6-allrouters
 `,
 		},
 		{
-			"203.0.113.1",
+			[]string{"203.0.113.1"},
 			"podFoo",
 			"domainFoo",
 			[]v1.HostAlias{
@@ -300,7 +300,7 @@ fe00::2	ip6-allrouters
 `,
 		},
 		{
-			"203.0.113.1",
+			[]string{"203.0.113.1"},
 			"podFoo",
 			"domainFoo",
 			[]v1.HostAlias{
@@ -321,10 +321,33 @@ fe00::2	ip6-allrouters
 456.78.90.123	park	doo	boo
 `,
 		},
+		{
+			[]string{"203.0.113.1", "1.2.3.4"},
+			"podFoo",
+			"domainFoo",
+			[]v1.HostAlias{
+				{IP: "123.45.67.89", Hostnames: []string{"foo", "bar", "baz"}},
+				{IP: "456.78.90.123", Hostnames: []string{"park", "doo", "boo"}},
+			},
+			`# Kubernetes-managed hosts file.
+127.0.0.1	localhost
+::1	localhost ip6-localhost ip6-loopback
+fe00::0	ip6-localnet
+fe00::0	ip6-mcastprefix
+fe00::1	ip6-allnodes
+fe00::2	ip6-allrouters
+203.0.113.1	podFoo.domainFoo	podFoo
+1.2.3.4	podFoo.domainFoo	podFoo
+
+# Entries added by HostAliases.
+123.45.67.89	foo	bar	baz
+456.78.90.123	park	doo	boo
+`,
+		},
 	}
 
 	for _, testCase := range testCases {
-		actualContent := managedHostsFileContent(testCase.hostIP, testCase.hostName, testCase.hostDomainName, testCase.hostAliases)
+		actualContent := managedHostsFileContent(testCase.hostIPs, testCase.hostName, testCase.hostDomainName, testCase.hostAliases)
 		assert.Equal(t, testCase.expectedContent, string(actualContent), "hosts file content not expected")
 	}
 }
@@ -1626,9 +1649,9 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 				EnableServiceLinks: tc.enableServiceLinks,
 			},
 		}
-		podIP := "1.2.3.4"
+		podIPs := []string{"1.2.3.4"}
 
-		result, err := kl.makeEnvironmentVariables(testPod, tc.container, podIP)
+		result, err := kl.makeEnvironmentVariables(testPod, tc.container, podIPs)
 		select {
 		case e := <-fakeRecorder.Events:
 			assert.Equal(t, tc.expectedEvent, e)

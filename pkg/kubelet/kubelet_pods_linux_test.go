@@ -249,7 +249,7 @@ func TestMakeMounts(t *testing.T) {
 				},
 			}
 
-			mounts, _, err := makeMounts(&pod, "/pod", &tc.container, "fakepodname", "", "", tc.podVolumes, fm, fsp, nil)
+			mounts, _, err := makeMounts(&pod, "/pod", &tc.container, "fakepodname", "", []string{}, tc.podVolumes, fm, fsp, nil)
 
 			// validate only the error if we expect an error
 			if tc.expectErr {
