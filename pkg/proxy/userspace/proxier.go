@@ -68,6 +68,13 @@ type ServiceInfo struct {
 	stickyMaxAgeSeconds int
 	// Deprecated, but required for back-compat (including e2e)
 	externalIPs []string
+
+	// started is incremented when the service is created, and decremented
+	// when the service's socket begins accepting requests
+	started *sync.WaitGroup
+	// finished is incremented when the service is created, and decremented
+	// when the service's socket shuts down
+	finished *sync.WaitGroup
 }
 
 func (info *ServiceInfo) setAlive(b bool) {
@@ -124,7 +131,6 @@ type Proxier struct {
 	udpIdleTimeout  time.Duration
 	portMapMutex    sync.Mutex
 	portMap         map[portMapKey]*portMapValue
-	numProxyLoops   int32 // use atomic ops to access this; mostly for testing
 	listenIP        net.IP
 	iptables        iptables.Interface
 	hostIP          net.IP
@@ -427,14 +433,6 @@ func (proxier *Proxier) getServiceInfo(service proxy.ServicePortName) (*ServiceI
 	return info, ok
 }
 
-// addServiceOnPort lockes the proxy before calling addServiceOnPortInternal.
-// Used from testcases.
-func (proxier *Proxier) addServiceOnPort(service proxy.ServicePortName, protocol v1.Protocol, proxyPort int, timeout time.Duration) (*ServiceInfo, error) {
-	proxier.mu.Lock()
-	defer proxier.mu.Unlock()
-	return proxier.addServiceOnPortInternal(service, protocol, proxyPort, timeout)
-}
-
 // addServiceOnPortInternal starts listening for a new service, returning the ServiceInfo.
 // Pass proxyPort=0 to allocate a random port. The timeout only applies to UDP
 // connections, for now.
@@ -461,16 +459,23 @@ func (proxier *Proxier) addServiceOnPortInternal(service proxy.ServicePortName, 
 		protocol:            protocol,
 		socket:              sock,
 		sessionAffinityType: v1.ServiceAffinityNone, // default
+		started:             &sync.WaitGroup{},
+		finished:            &sync.WaitGroup{},
 	}
+	si.started.Add(1)
+	si.finished.Add(1)
 	proxier.serviceMap[service] = si
 
 	klog.V(2).Infof("Proxying for service %q on %s port %d", service, protocol, portNum)
-	go func(service proxy.ServicePortName, proxier *Proxier) {
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
 		defer runtime.HandleCrash()
-		atomic.AddInt32(&proxier.numProxyLoops, 1)
+		wg.Done()
 		sock.ProxyLoop(service, si, proxier.loadBalancer)
-		atomic.AddInt32(&proxier.numProxyLoops, -1)
-	}(service, proxier)
+	}()
+	// Wait until the ProxyLoop goroutine has actually started
+	wg.Wait()
 
 	return si, nil
 }
@@ -509,6 +514,7 @@ func (proxier *Proxier) mergeService(service *v1.Service) sets.String {
 			if err := proxier.cleanupPortalAndProxy(serviceName, info); err != nil {
 				klog.Error(err)
 			}
+			info.finished.Done()
 		}
 		proxyPort, err := proxier.proxyPorts.AllocateNext()
 		if err != nil {
@@ -541,6 +547,8 @@ func (proxier *Proxier) mergeService(service *v1.Service) sets.String {
 			klog.Errorf("Failed to open portal for %q: %v", serviceName, err)
 		}
 		proxier.loadBalancer.NewService(serviceName, info.sessionAffinityType, info.stickyMaxAgeSeconds)
+
+		info.started.Done()
 	}
 
 	return existingPorts
@@ -578,6 +586,7 @@ func (proxier *Proxier) unmergeService(service *v1.Service, existingPorts sets.S
 			klog.Error(err)
 		}
 		proxier.loadBalancer.DeleteService(serviceName)
+		info.finished.Done()
 	}
 	for _, svcIP := range staleUDPServices.UnsortedList() {
 		if err := conntrack.ClearEntriesForIP(proxier.exec, svcIP, v1.ProtocolUDP); err != nil {
