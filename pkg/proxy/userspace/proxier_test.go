@@ -88,6 +88,14 @@ func waitForClosedPortUDP(p *Proxier, proxyPort int) error {
 	return fmt.Errorf("port %d still open", proxyPort)
 }
 
+func waitForProxyFinished(t *testing.T, svcInfo *ServiceInfo) {
+	if err := wait.PollImmediate(50*time.Millisecond, 30*time.Second, func() (bool, error) {
+		return svcInfo.IsFinished(), nil
+	}); err != nil {
+		t.Errorf("timed out waiting for proxy socket to finish: %v", err)
+	}
+}
+
 func waitForServiceInfo(t *testing.T, p *Proxier, servicePortName proxy.ServicePortName, service *v1.Service, idx int) *ServiceInfo {
 	var svcInfo *ServiceInfo
 	var exists bool
@@ -104,7 +112,14 @@ func waitForServiceInfo(t *testing.T, p *Proxier, servicePortName proxy.ServiceP
 	if svcInfo.portal.ip.String() != service.Spec.ClusterIP || int32(svcInfo.portal.port) != service.Spec.Ports[idx].Port || svcInfo.protocol != service.Spec.Ports[idx].Protocol {
 		t.Errorf("unexpected serviceInfo for %s: %#v", servicePortName, svcInfo)
 	}
-	svcInfo.started.Wait()
+
+	// Wait for proxy socket to start up
+	if err := wait.PollImmediate(50*time.Millisecond, 30*time.Second, func() (bool, error) {
+		return svcInfo.IsStarted(), nil
+	}); err != nil {
+		t.Errorf("timed out waiting for proxy socket %s to start: %v", servicePortName, err)
+	}
+
 	return svcInfo
 }
 
@@ -123,7 +138,7 @@ func waitForServiceDelete(t *testing.T, p *Proxier, svcInfo *ServiceInfo, servic
 	if err := waitFunc(p, svcInfo.proxyPort); err != nil {
 		t.Fatalf(err.Error())
 	}
-	svcInfo.finished.Wait()
+	waitForProxyFinished(t, svcInfo)
 	if svcInfo.IsAlive() {
 		t.Fatalf("wrong value for IsAlive(): expected false")
 	}
@@ -737,7 +752,7 @@ func TestTCPProxyUpdatePort(t *testing.T) {
 	if err := waitForClosedPortTCP(p, origPort); err != nil {
 		t.Fatalf(err.Error())
 	}
-	svcInfo.finished.Wait()
+	waitForProxyFinished(t, svcInfo)
 
 	svcInfo = addServiceAndWaitForInfo(t, p, serviceP, service)
 	testEchoTCP(t, "127.0.0.1", svcInfo.proxyPort)
@@ -782,7 +797,7 @@ func TestUDPProxyUpdatePort(t *testing.T) {
 	if err := waitForClosedPortUDP(p, origPort); err != nil {
 		t.Fatalf(err.Error())
 	}
-	svcInfo.finished.Wait()
+	waitForProxyFinished(t, svcInfo)
 
 	svcInfo = addServiceAndWaitForInfo(t, p, serviceP, service)
 	testEchoUDP(t, "127.0.0.1", svcInfo.proxyPort)
@@ -827,7 +842,7 @@ func TestProxyUpdatePublicIPs(t *testing.T) {
 	if err := waitForClosedPortTCP(p, origPort); err != nil {
 		t.Fatalf(err.Error())
 	}
-	svcInfo.finished.Wait()
+	waitForProxyFinished(t, svcInfo)
 	testEchoTCP(t, "127.0.0.1", svcInfo.proxyPort)
 }
 
@@ -884,7 +899,7 @@ func TestProxyUpdatePortal(t *testing.T) {
 	if exists {
 		t.Fatalf("service with empty ClusterIP should not be included in the proxy")
 	}
-	svcInfo.finished.Wait()
+	waitForProxyFinished(t, svcInfo)
 
 	svcv2 := &v1.Service{
 		ObjectMeta: svcv0.ObjectMeta,

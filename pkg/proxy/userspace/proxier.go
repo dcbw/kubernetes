@@ -69,12 +69,28 @@ type ServiceInfo struct {
 	// Deprecated, but required for back-compat (including e2e)
 	externalIPs []string
 
-	// started is incremented when the service is created, and decremented
-	// when the service's socket begins accepting requests
-	started *sync.WaitGroup
-	// finished is incremented when the service is created, and decremented
-	// when the service's socket shuts down
-	finished *sync.WaitGroup
+	// isStartedAtomic is set to non-zero when the service's socket begins
+	// accepting requests. Used in testcases. Only access this with atomic ops.
+	isStartedAtomic int32
+	// isFinishedAtomic is set to non-zero when the service's socket shuts
+	// down. Used in testcases. Only access this with atomic ops.
+	isFinishedAtomic int32
+}
+
+func (info *ServiceInfo) setStarted() {
+	atomic.StoreInt32(&info.isStartedAtomic, 1)
+}
+
+func (info *ServiceInfo) IsStarted() bool {
+	return atomic.LoadInt32(&info.isStartedAtomic) != 0
+}
+
+func (info *ServiceInfo) setFinished() {
+	atomic.StoreInt32(&info.isFinishedAtomic, 1)
+}
+
+func (info *ServiceInfo) IsFinished() bool {
+	return atomic.LoadInt32(&info.isFinishedAtomic) != 0
 }
 
 func (info *ServiceInfo) setAlive(b bool) {
@@ -459,11 +475,7 @@ func (proxier *Proxier) addServiceOnPortInternal(service proxy.ServicePortName, 
 		protocol:            protocol,
 		socket:              sock,
 		sessionAffinityType: v1.ServiceAffinityNone, // default
-		started:             &sync.WaitGroup{},
-		finished:            &sync.WaitGroup{},
 	}
-	si.started.Add(1)
-	si.finished.Add(1)
 	proxier.serviceMap[service] = si
 
 	klog.V(2).Infof("Proxying for service %q on %s port %d", service, protocol, portNum)
@@ -514,7 +526,7 @@ func (proxier *Proxier) mergeService(service *v1.Service) sets.String {
 			if err := proxier.cleanupPortalAndProxy(serviceName, info); err != nil {
 				klog.Error(err)
 			}
-			info.finished.Done()
+			info.setFinished()
 		}
 		proxyPort, err := proxier.proxyPorts.AllocateNext()
 		if err != nil {
@@ -548,7 +560,7 @@ func (proxier *Proxier) mergeService(service *v1.Service) sets.String {
 		}
 		proxier.loadBalancer.NewService(serviceName, info.sessionAffinityType, info.stickyMaxAgeSeconds)
 
-		info.started.Done()
+		info.setStarted()
 	}
 
 	return existingPorts
@@ -586,7 +598,7 @@ func (proxier *Proxier) unmergeService(service *v1.Service, existingPorts sets.S
 			klog.Error(err)
 		}
 		proxier.loadBalancer.DeleteService(serviceName)
-		info.finished.Done()
+		info.setFinished()
 	}
 	for _, svcIP := range staleUDPServices.UnsortedList() {
 		if err := conntrack.ClearEntriesForIP(proxier.exec, svcIP, v1.ProtocolUDP); err != nil {
